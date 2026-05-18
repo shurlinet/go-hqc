@@ -171,7 +171,7 @@ func (r *bytesReader) Read(p []byte) (int, error) {
 // parseDecapsulationKeyInternal parses sk bytes, validates consistency.
 // v5.0.0 SK layout: pk || seed_dk || sigma || seed_kem.
 func parseDecapsulationKeyInternal(p *params, sk []byte) (*decapsulationKey, error) {
-	pkLen := int(p.seedLen + p.vecNSizeBytes)
+	pkLen := int(uint32(p.seedLen) + p.vecNSizeBytes)
 	expectedSK := pkLen + int(p.seedLen) + int(p.securityBytes) + int(p.seedLen)
 	if len(sk) != expectedSK {
 		return nil, ErrInvalidKeySize
@@ -237,7 +237,7 @@ func parseDecapsulationKeyInternal(p *params, sk []byte) (*decapsulationKey, err
 // parseEncapsulationKeyInternal parses pk bytes into an encapsulationKey.
 // Caches H(pk) at parse time for constant-time encaps/decaps.
 func parseEncapsulationKeyInternal(p *params, pk []byte) (*encapsulationKey, error) {
-	expectedSize := int(p.seedLen + p.vecNSizeBytes)
+	expectedSize := int(uint32(p.seedLen) + p.vecNSizeBytes)
 	if len(pk) != expectedSize {
 		return nil, ErrInvalidKeySize
 	}
@@ -252,7 +252,7 @@ func parseEncapsulationKeyInternal(p *params, pk []byte) (*encapsulationKey, err
 	ekXOF.Release()
 
 	// Load s from pk bytes.
-	load8Arr(s[:p.vecNSize64], pk[p.seedLen:p.seedLen+p.vecNSizeBytes])
+	load8Arr(s[:p.vecNSize64], pk[p.seedLen:uint32(p.seedLen)+p.vecNSizeBytes])
 
 	pkCopy := make([]byte, len(pk))
 	copy(pkCopy, pk)
