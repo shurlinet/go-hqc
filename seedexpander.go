@@ -2,10 +2,10 @@ package hqc
 
 import "github.com/shurlinet/go-hqc/internal/shake"
 
-const seedExpanderDomain = 0x02
+const seedExpanderDomain = 0x01
 
-// seedExpander is a SHAKE256-based deterministic PRNG that squeezes
-// in 8-byte aligned blocks to match the reference C implementation's behavior.
+// seedExpander is a SHAKE256-based XOF with domain separation.
+// Absorbs seed || domain_byte, then squeezes arbitrary output.
 type seedExpander struct {
 	state *shake.State
 }
@@ -30,31 +30,11 @@ func (se *seedExpander) Release() {
 	se.state = nil
 }
 
-// Read squeezes output from the seed expander with 8-byte alignment.
-// For requests not a multiple of 8, it squeezes the aligned portion first,
-// then squeezes a full 8-byte block and copies only the remainder.
-// The extra bytes are consumed from the SHAKE state (matching the reference C exactly).
+// Read squeezes output from the seed expander. Direct squeeze with no alignment
+// padding - each byte consumed from the SHAKE state maps 1:1 to output bytes.
 func (se *seedExpander) Read(output []byte) {
-	outlen := len(output)
-	remainder := outlen % 8
-	mainLen := outlen - remainder
-
-	if mainLen > 0 {
-		n, _ := se.state.Read(output[:mainLen])
-		if n != mainLen {
-			panic("hqc: SHAKE256 short read")
-		}
-	}
-
-	if remainder > 0 {
-		var tmp [8]byte
-		n, _ := se.state.Read(tmp[:])
-		if n != 8 {
-			panic("hqc: SHAKE256 short read")
-		}
-		copy(output[mainLen:], tmp[:remainder])
-		// Zero the alignment buffer (includes discarded SHAKE output bytes).
-		// Must use noinline-protected zeroing to prevent dead-store elimination.
-		ZeroBytes(tmp[:])
+	n, _ := se.state.Read(output)
+	if n != len(output) {
+		panic("hqc: SHAKE256 short read")
 	}
 }
