@@ -36,7 +36,7 @@ type KATRNG struct {
 func NewKATRNG(entropy []byte) *KATRNG {
 	st := shake.New256()
 	st.Write(entropy)
-	st.Write([]byte{0x01}) // PRNG_DOMAIN
+	st.Write([]byte{0x00}) // HQC_PRNG_DOMAIN (v5.0.0)
 	return &KATRNG{state: st}
 }
 
