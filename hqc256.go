@@ -7,11 +7,11 @@ import (
 
 // HQC-256 key and ciphertext sizes.
 const (
-	PublicKeySize256    = 7245  // 40 + ceil(57637/8)
-	SecretKeySize256    = 7317  // 40 + 32 + 7245
+	PublicKeySize256    = 7237  // 32 + ceil(57637/8)
+	SecretKeySize256    = 7333  // 7237 + 32 + 32 + 32
 	CiphertextSize256   = 14421 // ceil(57637/8) + ceil(57600/8) + 16
-	SharedSecretSize256 = 64
-	SeedSize256         = 112 // sk_seed(40) + sigma(32) + pk_seed(40)
+	SharedSecretSize256 = 32
+	SeedSize256         = 32 // seed_kem (32 bytes)
 )
 
 // DecapsulationKey256 is an HQC-256 decapsulation (secret) key.
@@ -36,7 +36,7 @@ func GenerateKey256() (*DecapsulationKey256, error) {
 }
 
 // NewDecapsulationKey256 creates a decapsulation key from a 112-byte seed.
-// The seed is sk_seed(40) || sigma(32) || pk_seed(40).
+// The seed is seed_kem (32 bytes).
 func NewDecapsulationKey256(seed []byte) (*DecapsulationKey256, error) {
 	dk, err := newDecapsulationKeyFromSeed(params256, seed)
 	if err != nil {
@@ -45,7 +45,7 @@ func NewDecapsulationKey256(seed []byte) (*DecapsulationKey256, error) {
 	return &DecapsulationKey256{dk: dk}, nil
 }
 
-// ParseDecapsulationKey256 parses a 7317-byte NIST-format secret key.
+// ParseDecapsulationKey256 parses a 7333-byte secret key.
 // Validates that the embedded public key matches the secret key seed.
 func ParseDecapsulationKey256(data []byte) (*DecapsulationKey256, error) {
 	if len(data) != SecretKeySize256 {
@@ -58,7 +58,7 @@ func ParseDecapsulationKey256(data []byte) (*DecapsulationKey256, error) {
 	return &DecapsulationKey256{dk: dk}, nil
 }
 
-// ParseEncapsulationKey256 parses a 7245-byte public key.
+// ParseEncapsulationKey256 parses a 7237-byte public key.
 func ParseEncapsulationKey256(data []byte) (*EncapsulationKey256, error) {
 	ek, err := parseEncapsulationKeyInternal(params256, data)
 	if err != nil {
@@ -75,7 +75,7 @@ func (ek *EncapsulationKey256) Encapsulate() (sharedSecret, ciphertext []byte) {
 }
 
 // Decapsulate decrypts a ciphertext and returns the shared secret.
-// Always returns a 64-byte shared secret (implicit rejection via sigma).
+// Always returns a 32-byte shared secret (implicit rejection via sigma).
 func (dk *DecapsulationKey256) Decapsulate(ciphertext []byte) ([]byte, error) {
 	return decapsulate(params256, dk.dk, ciphertext)
 }
@@ -86,7 +86,7 @@ func (dk *DecapsulationKey256) EncapsulationKey() *EncapsulationKey256 {
 	return &EncapsulationKey256{ek: dk.dk.ek}
 }
 
-// Bytes returns the 7317-byte NIST-format secret key (sk_seed || sigma || pk).
+// Bytes returns the 7333-byte secret key (pk || seed_dk || sigma || seed_kem).
 // Returns nil after [DecapsulationKey256.Destroy].
 func (dk *DecapsulationKey256) Bytes() []byte {
 	dk.dk.mu.RLock()
@@ -99,7 +99,7 @@ func (dk *DecapsulationKey256) Bytes() []byte {
 	return out
 }
 
-// Seed returns the 112-byte compact seed (sk_seed || sigma || pk_seed).
+// Seed returns the 112-byte compact seed (pk || seed_dk || sigma || seed_kem_seed).
 // Returns nil after [DecapsulationKey256.Destroy].
 func (dk *DecapsulationKey256) Seed() []byte {
 	dk.dk.mu.RLock()
@@ -107,12 +107,12 @@ func (dk *DecapsulationKey256) Seed() []byte {
 	if dk.dk.destroyed {
 		return nil
 	}
-	out := make([]byte, len(dk.dk.seed))
-	copy(out, dk.dk.seed)
+	out := make([]byte, len(dk.dk.seedKem))
+	copy(out, dk.dk.seedKem)
 	return out
 }
 
-// Destroy zeroes all secret key material (skSeed, sigma, x, y, sk, seed).
+// Destroy zeroes all secret key material (seedDK, sigma, seedKem, x, y, sk).
 // After Destroy, Decapsulate returns [ErrDestroyed] and Bytes/Seed return nil.
 // The corresponding [EncapsulationKey256] remains valid (public data only).
 // Dropping the key reference without calling Destroy leaves secret material
