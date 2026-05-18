@@ -1,0 +1,13 @@
+Third-Party Licenses
+====================
+
+HQC Reference Implementation
+https://gitlab.com/pqc-hqc/hqc/
+Tag: v5.0.0
+
+The HQC reference implementation is released under the CC0 1.0 Universal
+public domain dedication. go-hqc is a Go port derived from this reference.
+
+To the extent possible under law, the HQC authors have waived all copyright
+and related or neighboring rights to the HQC reference implementation.
+See https://creativecommons.org/publicdomain/zero/1.0/
