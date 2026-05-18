@@ -1,0 +1,134 @@
+package hqc
+
+import (
+	"crypto/rand"
+	"io"
+)
+
+// HQC-192 key and ciphertext sizes.
+const (
+	PublicKeySize192    = 4522 // 40 + ceil(35851/8)
+	SecretKeySize192    = 4586 // 40 + 24 + 4522
+	CiphertextSize192   = 8978 // ceil(35851/8) + ceil(35840/8) + 16
+	SharedSecretSize192 = 64
+	SeedSize192         = 104 // sk_seed(40) + sigma(24) + pk_seed(40)
+)
+
+// DecapsulationKey192 is an HQC-192 decapsulation (secret) key.
+type DecapsulationKey192 struct {
+	dk *decapsulationKey
+}
+
+// EncapsulationKey192 is an HQC-192 encapsulation (public) key.
+type EncapsulationKey192 struct {
+	ek *encapsulationKey
+}
+
+// GenerateKey192 generates a new HQC-192 keypair using crypto/rand.
+// The error return exists for API consistency; it currently never errors
+// (panics on entropy failure, matching crypto/mlkem).
+func GenerateKey192() (*DecapsulationKey192, error) {
+	dk, err := generateKeyFromRand(params192)
+	if err != nil {
+		return nil, err
+	}
+	return &DecapsulationKey192{dk: dk}, nil
+}
+
+// NewDecapsulationKey192 creates a decapsulation key from a 104-byte seed.
+// The seed is sk_seed(40) || sigma(24) || pk_seed(40).
+func NewDecapsulationKey192(seed []byte) (*DecapsulationKey192, error) {
+	dk, err := newDecapsulationKeyFromSeed(params192, seed)
+	if err != nil {
+		return nil, err
+	}
+	return &DecapsulationKey192{dk: dk}, nil
+}
+
+// ParseDecapsulationKey192 parses a 4586-byte NIST-format secret key.
+// Validates that the embedded public key matches the secret key seed.
+func ParseDecapsulationKey192(data []byte) (*DecapsulationKey192, error) {
+	if len(data) != SecretKeySize192 {
+		return nil, ErrInvalidKeySize
+	}
+	dk, err := parseDecapsulationKeyInternal(params192, data)
+	if err != nil {
+		return nil, err
+	}
+	return &DecapsulationKey192{dk: dk}, nil
+}
+
+// ParseEncapsulationKey192 parses a 4522-byte public key.
+func ParseEncapsulationKey192(data []byte) (*EncapsulationKey192, error) {
+	ek, err := parseEncapsulationKeyInternal(params192, data)
+	if err != nil {
+		return nil, err
+	}
+	return &EncapsulationKey192{ek: ek}, nil
+}
+
+// Encapsulate generates a shared key and an associated ciphertext.
+// Panics if the system random number generator fails.
+func (ek *EncapsulationKey192) Encapsulate() (sharedSecret, ciphertext []byte) {
+	ct, ss := encapsulate(params192, ek.ek, rand.Reader)
+	return ss, ct
+}
+
+// Decapsulate decrypts a ciphertext and returns the shared secret.
+// Always returns a 64-byte shared secret (implicit rejection via sigma).
+func (dk *DecapsulationKey192) Decapsulate(ciphertext []byte) ([]byte, error) {
+	return decapsulate(params192, dk.dk, ciphertext)
+}
+
+// EncapsulationKey returns the public key corresponding to this secret key.
+// The returned key is independent and survives Destroy.
+func (dk *DecapsulationKey192) EncapsulationKey() *EncapsulationKey192 {
+	return &EncapsulationKey192{ek: dk.dk.ek}
+}
+
+// Bytes returns the 4586-byte NIST-format secret key (sk_seed || sigma || pk).
+// Returns nil after [DecapsulationKey192.Destroy].
+func (dk *DecapsulationKey192) Bytes() []byte {
+	dk.dk.mu.RLock()
+	defer dk.dk.mu.RUnlock()
+	if dk.dk.destroyed {
+		return nil
+	}
+	out := make([]byte, len(dk.dk.sk))
+	copy(out, dk.dk.sk)
+	return out
+}
+
+// Seed returns the 104-byte compact seed (sk_seed || sigma || pk_seed).
+// Returns nil after [DecapsulationKey192.Destroy].
+func (dk *DecapsulationKey192) Seed() []byte {
+	dk.dk.mu.RLock()
+	defer dk.dk.mu.RUnlock()
+	if dk.dk.destroyed {
+		return nil
+	}
+	out := make([]byte, len(dk.dk.seed))
+	copy(out, dk.dk.seed)
+	return out
+}
+
+// Destroy zeroes all secret key material (skSeed, sigma, x, y, sk, seed).
+// After Destroy, Decapsulate returns [ErrDestroyed] and Bytes/Seed return nil.
+// The corresponding [EncapsulationKey192] remains valid (public data only).
+// Dropping the key reference without calling Destroy leaves secret material
+// in memory until garbage collected. Double Destroy is safe.
+func (dk *DecapsulationKey192) Destroy() {
+	dk.dk.destroy()
+}
+
+// Bytes returns the 4522-byte public key.
+func (ek *EncapsulationKey192) Bytes() []byte {
+	out := make([]byte, len(ek.ek.pk))
+	copy(out, ek.ek.pk)
+	return out
+}
+
+func (ek *EncapsulationKey192) encapsulateWithRandom(r io.Reader) (sharedSecret, ciphertext []byte) {
+	ct, ss := encapsulate(params192, ek.ek, r)
+	return ss, ct
+}
