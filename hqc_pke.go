@@ -3,16 +3,14 @@ package hqc
 // HQC-PKE IND-CPA scheme: keygen, encrypt, decrypt.
 // Internal functions only. The public API is in hqc128.go/192/256.
 
-// hqcPKEKeygen generates a PKE keypair.
-// Returns serialized pk and sk byte slices.
-// rand is used for sk_seed (40), sigma (vecKSizeBytes), pk_seed (40).
-func hqcPKEKeygen(p *params, randReader func([]byte)) (pk, sk []byte) {
-	seedLen := uint32(p.seedLen)
-	vecKBytes := p.vecKSizeBytes
-
-	skSeed := make([]byte, seedLen)
-	sigma := make([]byte, vecKBytes)
-	pkSeed := make([]byte, seedLen)
+// hqcPKEKeygen generates a PKE keypair from seed_pke.
+// v5.0.0: hash_i(seed_pke) -> keypair_seed[64] = seed_dk[32] || seed_ek[32].
+// Returns serialized pk and seed_dk.
+func hqcPKEKeygen(p *params, seedPKE []byte) (pk []byte, seedDK []byte) {
+	// hash_i: SHA3-512(seed_pke || domain=2) -> 64 bytes.
+	keypairSeed := hashI(seedPKE)
+	seedDKLocal := keypairSeed[:32]
+	seedEK := keypairSeed[32:]
 
 	x := make([]uint64, p.vecNSize64)
 	y := make([]uint64, p.vecNSize64)
@@ -20,47 +18,40 @@ func hqcPKEKeygen(p *params, randReader func([]byte)) (pk, sk []byte) {
 	s := make([]uint64, p.vecNSize64)
 
 	defer func() {
-		ZeroBytes(skSeed)
-		ZeroBytes(sigma)
 		ZeroUint64s(x)
 		ZeroUint64s(y)
+		ZeroBytes(keypairSeed[:])
 	}()
 
-	// Generate randomness: sk_seed first, sigma second, pk_seed third.
-	randReader(skSeed)
-	randReader(sigma)
-	skSE := newSeedExpander(skSeed)
-	defer skSE.Release()
+	// Secret key vectors from seed_dk: y FIRST, then x (v5.0.0 order).
+	dkXOF := newSeedExpander(seedDKLocal)
+	sampleFixedWeightKeygen(p, dkXOF, y, p.omega)
+	sampleFixedWeightKeygen(p, dkXOF, x, p.omega)
+	dkXOF.Release()
 
-	randReader(pkSeed)
-	pkSE := newSeedExpander(pkSeed)
-	defer pkSE.Release()
+	// Public key: h from seed_ek, s = x + y*h.
+	ekXOF := newSeedExpander(seedEK)
+	sampleRandomVector(p, ekXOF, h)
+	ekXOF.Release()
 
-	// Secret key vectors: x then y from sk_seedexpander (order matters for SHAKE state).
-	sampleFixedWeightVector(p, skSE, x, p.omega)
-	sampleFixedWeightVector(p, skSE, y, p.omega)
-
-	// Public key: h from pk_seedexpander, s = x + y*h.
-	sampleRandomVector(p, pkSE, h)
 	polyMul(p, s, y, h)
 	polyAdd(s, x, s, int(p.vecNSize64))
 
-	// Serialize: pk first because sk embeds a copy of pk.
-	pk = make([]byte, seedLen+p.vecNSizeBytes)
-	copy(pk[:seedLen], pkSeed)
-	store8Arr(pk[seedLen:], s[:p.vecNSize64])
+	// pk = seed_ek || store8(s)
+	pk = make([]byte, int(p.seedLen)+int(p.vecNSizeBytes))
+	copy(pk[:p.seedLen], seedEK)
+	store8Arr(pk[p.seedLen:], s[:p.vecNSize64])
 
-	sk = make([]byte, seedLen+vecKBytes+uint32(len(pk)))
-	copy(sk, skSeed)
-	copy(sk[seedLen:], sigma)
-	copy(sk[seedLen+vecKBytes:], pk)
+	// Return seed_dk for inclusion in SK.
+	seedDK = make([]byte, 32)
+	copy(seedDK, seedDKLocal)
 
-	return pk, sk
+	return pk, seedDK
 }
 
 // hqcPKEEncryptCached encrypts using pre-parsed h, s vectors.
-// theta must be at least seedLen bytes (only the first seedLen bytes are used).
-// Avoids re-parsing pk bytes when h, s are already cached.
+// theta is 32 bytes (seed for the encryption XOF).
+// v5.0.0 sampling order: r2, e, r1 (NOT r1, r2, e).
 func hqcPKEEncryptCached(p *params, u, v []uint64, m, theta []byte, h, s []uint64) {
 	if len(theta) < int(p.seedLen) {
 		panic("hqc: theta too short for seedexpander")
@@ -79,31 +70,36 @@ func hqcPKEEncryptCached(p *params, u, v []uint64, m, theta []byte, h, s []uint6
 		ZeroUint64s(tmp2)
 	}()
 
-	vecSE := newSeedExpander(theta[:uint32(p.seedLen)])
+	vecSE := newSeedExpander(theta[:p.seedLen])
 	defer vecSE.Release()
 
-	// Sample r1, r2, e in that exact order (SHAKE state consumed sequentially).
-	sampleFixedWeightVector(p, vecSE, r1, p.omegaR)
-	sampleFixedWeightVector(p, vecSE, r2, p.omegaR)
-	sampleFixedWeightVector(p, vecSE, e, p.omegaE)
+	// v5.0.0 sampling order: r2 FIRST, then e, then r1.
+	sampleFixedWeightEncrypt(p, vecSE, r2, p.omegaR)
+	sampleFixedWeightEncrypt(p, vecSE, e, p.omegaE)
+	sampleFixedWeightEncrypt(p, vecSE, r1, p.omegaR)
 
 	// u = r1 + r2*h
 	polyMul(p, u, r2, h)
 	polyAdd(u, r1, u, int(p.vecNSize64))
 
-	// v = encode(m) expanded to N bits, + s*r2 + e, truncated back to N1N2 bits.
+	// v = encode(m) + truncate(s*r2 + e)
+	// Compute s*r2 + e in full N-bit space, then truncate to N1N2.
+	polyMul(p, tmp2, r2, s)
+	polyAdd(tmp2, e, tmp2, int(p.vecNSize64))
+
+	// Encode m into N1N2-sized vector, expand to N bits for addition.
 	codeEncode(p, v, m)
 	vectResize(tmp1, p.n, v, p.n1n2)
 
-	polyMul(p, tmp2, r2, s)
-	polyAdd(tmp2, e, tmp2, int(p.vecNSize64))
 	polyAdd(tmp2, tmp1, tmp2, int(p.vecNSize64))
-	vectResize(v, p.n1n2, tmp2, p.n)
+
+	// Truncate result to N1N2 bits and store in v.
+	// v is passed as vecNSize64 words to hold the full intermediate.
+	vectTruncate(p, tmp2)
+	copy(v[:p.vecN1N2Size64], tmp2[:p.vecN1N2Size64])
 }
 
 // hqcPKEDecryptCached decrypts a ciphertext (u, v) using pre-cached y vector.
-// sigma is copied from the caller's cached sigma (not re-parsed from sk).
-// This avoids regenerating x, y from sk_seed on every Decapsulate call.
 func hqcPKEDecryptCached(p *params, m []byte, y, u, v []uint64) {
 	tmp1 := make([]uint64, p.vecNSize64)
 	tmp2 := make([]uint64, p.vecNSize64)
@@ -113,39 +109,13 @@ func hqcPKEDecryptCached(p *params, m []byte, y, u, v []uint64) {
 		ZeroUint64s(tmp2)
 	}()
 
-	// Compute v - u*y (in GF(2), subtraction = addition = XOR).
-	vectResize(tmp1, p.n, v, p.n1n2)
-	polyMul(p, tmp2, y, u)
-	polyAdd(tmp2, tmp1, tmp2, int(p.vecNSize64))
+	// tmp1 = u*y (full N-bit product).
+	polyMul(p, tmp1, y, u)
+	// Truncate to N1N2 bits.
+	vectTruncate(p, tmp1)
+	// tmp2 = v - truncate(u*y) (XOR in GF(2)).
+	polyAdd(tmp2, v, tmp1, int(p.vecN1N2Size64))
 
 	// Decode to recover m.
 	codeDecode(p, m, tmp2)
-}
-
-// hqcPublicKeyFromBytes parses a public key: regenerates h from pk_seed,
-// loads s from the remaining bytes.
-func hqcPublicKeyFromBytes(p *params, h, s []uint64, pk []byte) {
-	sl := uint32(p.seedLen)
-	pkSE := newSeedExpander(pk[:sl])
-	sampleRandomVector(p, pkSE, h)
-	pkSE.Release()
-
-	load8Arr(s[:p.vecNSize64], pk[sl:sl+p.vecNSizeBytes])
-}
-
-// hqcSecretKeyFromBytes parses a secret key: extracts sigma, regenerates x and y
-// from sk_seed, copies embedded pk.
-func hqcSecretKeyFromBytes(p *params, x, y []uint64, sigma, pk []byte, sk []byte) {
-	sl := uint32(p.seedLen)
-	vk := p.vecKSizeBytes
-
-	// Extract sigma before seedexpander init (sigma is at a fixed offset, not derived from SHAKE).
-	copy(sigma, sk[sl:sl+vk])
-
-	skSE := newSeedExpander(sk[:sl])
-	sampleFixedWeightVector(p, skSE, x, p.omega)
-	sampleFixedWeightVector(p, skSE, y, p.omega)
-	skSE.Release()
-
-	copy(pk, sk[sl+vk:])
 }
