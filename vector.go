@@ -1,6 +1,6 @@
 package hqc
 
-// Vector operations: sampling, addition, comparison, resize.
+// Vector operations: sampling, addition, comparison, truncation.
 
 // compareU32 returns 1 if v1 == v2, 0 otherwise (constant-time).
 func compareU32(v1, v2 uint32) uint32 {
@@ -28,25 +28,92 @@ func condSub(r, n uint32) uint32 {
 	return r + (n & mask)
 }
 
-// barrettReduce reduces a mod (n - i) using precomputed Barrett reciprocal.
-// mVal[i] = floor(2^32 / (n-i)). The uint64 cast is mandatory to get the
-// full 64-bit product before extracting the high 32 bits.
-func barrettReduce(a uint32, i int, p *params) uint32 {
-	q := uint32((uint64(a) * uint64(p.mVal[i])) >> 32)
-	n := p.n - uint32(i)
-	r := a - q*n
+// barrettReduceN reduces x mod n using precomputed nMu = floor(2^32 / n).
+// Constant-time Barrett reduction with conditional correction.
+// Used by sampler1 (rejection sampling for keygen).
+func barrettReduceN(x, nMu, n uint32) uint32 {
+	q := uint32((uint64(x) * uint64(nMu)) >> 32)
+	r := x - q*n
 	return condSub(r, n)
 }
 
-// sampleFixedWeightVector generates a vector of the given Hamming weight
-// using the seed expander. Constant-time implementation.
-func sampleFixedWeightVector(p *params, se *seedExpander, v []uint64, weight uint16) {
-	if p == nil {
-		panic("hqc: nil params")
+// writeSupport sets bits at the given support positions in the output vector.
+// Constant-time over all words (no secret-dependent branching on positions).
+func writeSupport(v []uint64, support []uint32, weight uint16, vecNSize64 uint32) {
+	indexTab := make([]uint32, weight)
+	bitTab := make([]uint64, weight)
+	defer func() {
+		ZeroUint32s(indexTab)
+		ZeroUint64s(bitTab)
+	}()
+
+	for i := 0; i < int(weight); i++ {
+		indexTab[i] = support[i] >> 6
+		bitTab[i] = singleBitMask(support[i] & 0x3f)
 	}
 
-	// Zero the output vector to ensure clean state (matches the reference C
-	// callers which always pass zero-initialized arrays).
+	for i := uint32(0); i < vecNSize64; i++ {
+		var val uint64
+		for j := 0; j < int(weight); j++ {
+			tmp := i - indexTab[j]
+			eq := 1 ^ ((tmp | (0 - tmp)) >> 31)
+			mask64 := uint64(0) - uint64(eq)
+			val |= bitTab[j] & mask64
+		}
+		v[i] = val
+	}
+}
+
+// sampleFixedWeightKeygen generates a fixed-weight vector using rejection
+// sampling (sampler1). Squeezes 3 bytes per candidate from the XOF, rejects
+// candidates >= rejectionThreshold, Barrett reduces accepted candidates.
+// NOT constant-time (variable-time rejection loop, acceptable for keygen).
+// Used for y and x in keygen.
+func sampleFixedWeightKeygen(p *params, se *seedExpander, v []uint64, weight uint16) {
+	for i := range v {
+		v[i] = 0
+	}
+
+	support := make([]uint32, weight)
+	defer ZeroUint32s(support)
+
+	randBytes := make([]byte, 3)
+	defer ZeroBytes(randBytes)
+
+	for i := uint16(0); i < weight; {
+		se.Read(randBytes)
+		candidate := uint32(randBytes[0]) | uint32(randBytes[1])<<8 | uint32(randBytes[2])<<16
+
+		if candidate >= p.rejectionThreshold {
+			continue
+		}
+		candidate = barrettReduceN(candidate, p.nMu, p.n)
+
+		// Linear scan for duplicates (not constant-time, acceptable for keygen).
+		duplicate := false
+		for j := uint16(0); j < i; j++ {
+			if candidate == support[j] {
+				duplicate = true
+				break
+			}
+		}
+		if duplicate {
+			continue
+		}
+
+		support[i] = candidate
+		i++
+	}
+
+	writeSupport(v, support, weight, p.vecNSize64)
+}
+
+// sampleFixedWeightEncrypt generates a fixed-weight vector using the
+// Fisher-Yates / Algorithm 5 sampler (sampler2). Squeezes exactly 4*weight
+// bytes from the XOF (deterministic consumption). Constant-time duplicate
+// resolution via backward scan.
+// Used for r2, e, r1 in encrypt.
+func sampleFixedWeightEncrypt(p *params, se *seedExpander, v []uint64, weight uint16) {
 	for i := range v {
 		v[i] = 0
 	}
@@ -55,28 +122,22 @@ func sampleFixedWeightVector(p *params, se *seedExpander, v []uint64, weight uin
 	se.Read(randBytes)
 
 	support := make([]uint32, weight)
-	indexTab := make([]uint32, weight)
-	bitTab := make([]uint64, weight)
 
 	defer func() {
 		ZeroBytes(randBytes)
 		ZeroUint32s(support)
-		ZeroUint32s(indexTab)
-		ZeroUint64s(bitTab)
 	}()
 
-	// Build support array with Barrett reduction.
+	// Fixed-point modular reduction: pos = i + floor(buff * (n-i) / 2^32).
 	for i := 0; i < int(weight); i++ {
-		// Each byte must be cast to uint32 before shifting; Go does not
-		// promote uint8 to a wider type on shift (unlike C).
-		support[i] = uint32(randBytes[4*i]) |
+		buff := uint32(randBytes[4*i]) |
 			uint32(randBytes[4*i+1])<<8 |
 			uint32(randBytes[4*i+2])<<16 |
 			uint32(randBytes[4*i+3])<<24
-		support[i] = uint32(i) + barrettReduce(support[i], i, p)
+		support[i] = uint32(i) + uint32((uint64(buff)*uint64(p.n-uint32(i)))>>32)
 	}
 
-	// Constant-time duplicate resolution (scan backward).
+	// Constant-time duplicate resolution (backward scan).
 	for i := int(weight) - 2; i >= 0; i-- {
 		var found uint32
 		for j := i + 1; j < int(weight); j++ {
@@ -86,25 +147,7 @@ func sampleFixedWeightVector(p *params, se *seedExpander, v []uint64, weight uin
 		support[i] = (mask32 & uint32(i)) ^ (^mask32 & support[i])
 	}
 
-	// Compute word index and bit mask for each support position.
-	for i := 0; i < int(weight); i++ {
-		indexTab[i] = support[i] >> 6
-		pos := support[i] & 0x3f
-		bitTab[i] = singleBitMask(pos)
-	}
-
-	// Set bits in the output vector (constant-time over all words).
-	vecN := int(p.vecNSize64)
-	for i := 0; i < vecN; i++ {
-		var val uint64
-		for j := 0; j < int(weight); j++ {
-			tmp := uint32(i) - indexTab[j]
-			eq := 1 ^ ((tmp | (0 - tmp)) >> 31)
-			mask64 := uint64(0) - uint64(eq)
-			val |= bitTab[j] & mask64
-		}
-		v[i] = val
-	}
+	writeSupport(v, support, weight, p.vecNSize64)
 }
 
 // sampleRandomVector generates a random binary vector of dimension n.
@@ -143,15 +186,27 @@ func constantTimeEqualUint64(a, b []uint64, nWords int) int {
 	for i := 0; i < nWords; i++ {
 		acc |= a[i] ^ b[i]
 	}
-	// acc == 0 means equal. Convert: (acc | -acc) >> 63 is 1 if acc != 0.
 	nonzero := (acc | (0 - acc)) >> 63
 	return int(1 - nonzero)
+}
+
+// vectTruncate zeros all bits beyond n1n2 in the vector (in-place).
+// Matches v5.0.0 vect_truncate: clears bits [n1n2, vecNSize64*64).
+func vectTruncate(p *params, v []uint64) {
+	lastWord := p.n1n2 / 64
+	lastBits := p.n1n2 % 64
+	if lastBits != 0 {
+		v[lastWord] &= (1 << lastBits) - 1
+		lastWord++
+	}
+	for i := lastWord; i < p.vecNSize64; i++ {
+		v[i] = 0
+	}
 }
 
 // vectResize copies a vector truncating or zero-extending to the target size in bits.
 func vectResize(o []uint64, sizeO uint32, v []uint64, sizeV uint32) {
 	if sizeO < sizeV {
-		// Truncate: copy the words needed for sizeO bits, then mask the top word.
 		nWords := int(ceilDiv(sizeO, 64))
 		copy(o[:nWords], v[:nWords])
 		tail := sizeO % 64
@@ -159,7 +214,6 @@ func vectResize(o []uint64, sizeO uint32, v []uint64, sizeV uint32) {
 			o[nWords-1] &= (1 << tail) - 1
 		}
 	} else {
-		// Extend: copy ceil(sizeV/64) words.
 		nWords := int(ceilDiv(sizeV, 64))
 		copy(o[:nWords], v[:nWords])
 	}
