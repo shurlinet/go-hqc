@@ -17,9 +17,8 @@ The formal standard is expected but not yet finalized. The standard adjusts para
 (seed 40->32, shared secret 64->32) from the submission. The core cryptographic
 construction (code-based KEM with Fujisaki-Okamoto transform, Reed-Solomon/
 Reed-Muller error correction) is mature (published 2017, 7+ years of
-cryptanalysis). go-hqc tracks the current
-the official HQC v5.0.0 reference and will be updated
-when FIPS 207 is published.
+cryptanalysis). go-hqc tracks the official HQC v5.0.0 reference and will be
+updated when FIPS 207 is published.
 
 > **Warning**
 >
