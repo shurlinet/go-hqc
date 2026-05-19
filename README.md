@@ -78,6 +78,7 @@ func main() {
 - Constant-time FO transform using `crypto/subtle`
 - Secret key zeroing via `Destroy()` (all persistent secret material)
 - Deterministic key generation from seed (`NewDecapsulationKey128(seed)`)
+- Deterministic encapsulation for testing (`EncapsulateWithEntropy` / `hqctest` sub-package, mirrors `crypto/mlkem/mlkemtest`)
 - Key consistency validation on parse (`ParseDecapsulationKey128`)
 - Concurrent-safe: `Decapsulate` is safe for concurrent use
 - Specification version check via `Version()`
@@ -166,6 +167,7 @@ Or directly: `GOHQC_ACCUMULATED=10000 go test -run=TestAccumulated -v ./...`
 | Benchmarks | 9 | Keygen/Encaps/Decaps per param set |
 | Fuzz | 2 | FuzzDecapsulate128, FuzzKeyRoundTrip128 |
 | Godoc examples | 3 | Basic, serialization, all param sets |
+| hqctest deterministic | 6 | Deterministic encaps reproducibility + size check (all 3 param sets) |
 | **Component tests** | 50 | GF, seedexpander, gf2x, vector, RM, RS, FFT, code |
 
 ## Verification

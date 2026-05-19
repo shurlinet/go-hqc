@@ -128,7 +128,12 @@ func (ek *EncapsulationKey192) Bytes() []byte {
 	return out
 }
 
-func (ek *EncapsulationKey192) encapsulateWithRandom(r io.Reader) (sharedSecret, ciphertext []byte) {
+// EncapsulateWithEntropy performs deterministic encapsulation using the
+// provided reader for randomness. For testing and vector generation only.
+// The reader must supply exactly 40 bytes (24 bytes m + 16 bytes salt).
+//
+// See [EncapsulationKey128.EncapsulateWithEntropy] for security warnings.
+func (ek *EncapsulationKey192) EncapsulateWithEntropy(r io.Reader) (sharedSecret, ciphertext []byte) {
 	ct, ss := encapsulate(params192, ek.ek, r)
 	return ss, ct
 }

@@ -16,6 +16,15 @@
 // [EncapsulationKey128.Encapsulate] that cannot fail (panics on entropy
 // failure), and implicit rejection via sigma for invalid ciphertexts.
 //
+// # Deterministic Testing
+//
+// For test vector generation and reproducible encapsulation, use
+// [EncapsulationKey128.EncapsulateWithEntropy] (or the convenience wrappers
+// in the [hqctest] sub-package). These accept an [io.Reader] that supplies a
+// fixed number of bytes per param set (32/40/48 for HQC-128/192/256),
+// mirroring [crypto/mlkem/mlkemtest]. Do not use deterministic encapsulation
+// in production - it defeats IND-CCA2 security.
+//
 // # Key Lifecycle
 //
 // Call [DecapsulationKey128.Destroy] when a decapsulation key is no longer

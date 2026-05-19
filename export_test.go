@@ -21,15 +21,15 @@ func newSHA3_512ForTest() hash.Hash {
 }
 
 func EncapsulateForTest128(ek *EncapsulationKey128, rand io.Reader) (sharedSecret, ciphertext []byte) {
-	return ek.encapsulateWithRandom(rand)
+	return ek.EncapsulateWithEntropy(rand)
 }
 
 func EncapsulateForTest192(ek *EncapsulationKey192, rand io.Reader) (sharedSecret, ciphertext []byte) {
-	return ek.encapsulateWithRandom(rand)
+	return ek.EncapsulateWithEntropy(rand)
 }
 
 func EncapsulateForTest256(ek *EncapsulationKey256, rand io.Reader) (sharedSecret, ciphertext []byte) {
-	return ek.encapsulateWithRandom(rand)
+	return ek.EncapsulateWithEntropy(rand)
 }
 
 // katPRNGDomain is the domain separation byte for the HQC KAT PRNG (v5.0.0).
