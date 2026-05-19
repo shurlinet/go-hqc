@@ -138,6 +138,9 @@ func generateKey(p *params, randSource io.Reader) (*decapsulationKey, error) {
 	copy(sk[len(pk)+int(p.seedLen)+int(p.securityBytes):], seedKem)
 
 	ZeroBytes(seedPKE)
+	ZeroBytes(seedKem)
+	ZeroBytes(sigma)
+	ZeroBytes(seedDK)
 
 	return parseDecapsulationKeyInternal(p, sk)
 }
@@ -163,6 +166,9 @@ type bytesReader struct {
 }
 
 func (r *bytesReader) Read(p []byte) (int, error) {
+	if r.off >= len(r.data) {
+		return 0, io.EOF
+	}
 	n := copy(p, r.data[r.off:])
 	r.off += n
 	return n, nil
