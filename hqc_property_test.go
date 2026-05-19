@@ -232,80 +232,72 @@ func TestPropertySeedRoundTripAllParams(t *testing.T) {
 
 // --- AI Threat Defense Tests ---
 
-// TestAIThreatDomainBytesNotSwapped verifies that the G and K domain
-// separation bytes are not transposed. A transposed pair would still produce
-// valid-looking output but break interop with the reference C.
+// TestAIThreatDomainBytesNotSwapped verifies that the four v5.0.0 hash
+// function domain bytes are not transposed. A transposed pair would still
+// produce valid-looking output but break interop with the reference C.
 func TestAIThreatDomainBytesNotSwapped(t *testing.T) {
-	// G function (theta derivation) uses domain 3.
-	// K function (shared secret derivation) uses domain 4.
-	// If these are swapped, KAT vectors would fail. But this test
-	// catches a subtler bug: someone re-orders the constants file
-	// and swaps the values without running KATs.
-	if gFctDomain != 3 {
-		t.Fatalf("G domain byte = %d, want 3 (v5.0.0 symmetric.h)", gFctDomain)
+	// v5.0.0 symmetric.h: G=0, H=1, I=2, J=3.
+	if gFctDomain != 0 {
+		t.Fatalf("G domain byte = %d, want 0", gFctDomain)
 	}
-	if kFctDomain != 4 {
-		t.Fatalf("K domain byte = %d, want 4 (v5.0.0 symmetric.h)", kFctDomain)
+	if hFctDomain != 1 {
+		t.Fatalf("H domain byte = %d, want 1", hFctDomain)
 	}
-	if gFctDomain >= kFctDomain {
-		t.Fatal("G domain must be less than K domain (3 < 4)")
+	if iFctDomain != 2 {
+		t.Fatalf("I domain byte = %d, want 2", iFctDomain)
+	}
+	if jFctDomain != 3 {
+		t.Fatalf("J domain byte = %d, want 3", jFctDomain)
+	}
+	// Uniqueness: no two domains may be equal.
+	domains := []byte{gFctDomain, hFctDomain, iFctDomain, jFctDomain}
+	for i := 0; i < len(domains); i++ {
+		for j := i + 1; j < len(domains); j++ {
+			if domains[i] == domains[j] {
+				t.Fatalf("domain collision: index %d and %d both = %d", i, j, domains[i])
+			}
+		}
 	}
 }
 
-// TestAIThreatSHAKEInputOrder verifies that shake256_512DS absorbs input
-// BEFORE the domain byte. Reversed order would produce valid-looking hashes
-// but break interop.
-func TestAIThreatSHAKEInputOrder(t *testing.T) {
-	// Compute G(input, domain=3) two ways:
-	// 1. Via shake256_512DS (production path)
-	// 2. Via manual SHAKE256(input || domain) construction
-	// They must match. If shake256_512DS absorbs domain before input,
-	// the outputs diverge.
-	input := []byte("hqc-test-input-for-ordering-verification")
-	domain := byte(gFctDomain)
+// TestAIThreatHashHIndependent verifies hashH via independent SHA3-256
+// construction. hashH(pk) = SHA3-256(pk || domain=1).
+func TestAIThreatHashHIndependent(t *testing.T) {
+	pk := []byte("hqc-test-public-key-for-hash-verification")
 
 	// Production path.
-	out1 := make([]byte, 64)
-	shake256_512DS(out1, input, domain)
+	got := hashH(pk)
 
-	// Independent construction: SHAKE256(input || domain), squeeze 64.
-	out2 := make([]byte, 64)
-	st := newSHAKE256ForTest()
-	if n, _ := st.Write(input); n != len(input) {
-		t.Fatalf("SHAKE Write(input): wrote %d, want %d", n, len(input))
-	}
-	if n, _ := st.Write([]byte{domain}); n != 1 {
-		t.Fatalf("SHAKE Write(domain): wrote %d, want 1", n)
-	}
-	if n, _ := st.Read(out2); n != 64 {
-		t.Fatalf("SHAKE Read: got %d bytes, want 64", n)
-	}
+	// Independent construction: SHA3-256(pk || 0x01).
+	h := newSHA3_256ForTest()
+	h.Write(pk)
+	h.Write([]byte{hFctDomain})
+	want := h.Sum(nil)
 
-	if !bytes.Equal(out1, out2) {
-		t.Fatal("shake256_512DS input order differs from SHAKE256(input || domain)")
+	if !bytes.Equal(got[:], want) {
+		t.Fatal("hashH output differs from independent SHA3-256(pk || domain)")
 	}
 }
 
-// TestAIThreatMValFormula verifies that the mVal lookup table for each
-// parameter set was computed correctly. mVal is used for Barrett reduction
-// in rejection sampling. An off-by-one would cause silent sampling failures.
-func TestAIThreatMValFormula(t *testing.T) {
-	// mVal[i] = floor(2^32 / (n - i)) for i in [0, omegaR).
-	// Barrett constant for rejection sampling: quotient must not overshoot.
+// TestAIThreatNMuFormula verifies that the nMu and rejectionThreshold
+// constants are correctly computed for all three parameter sets.
+func TestAIThreatNMuFormula(t *testing.T) {
 	paramSets := []*params{params128, params192, params256}
 	names := []string{"HQC-128", "HQC-192", "HQC-256"}
 
 	for idx, p := range paramSets {
-		if len(p.mVal) != int(p.omegaR) {
-			t.Fatalf("%s: mVal length = %d, want omegaR = %d", names[idx], len(p.mVal), p.omegaR)
+		// nMu = floor(2^32 / n)
+		expectedNMu := uint32(uint64(1<<32) / uint64(p.n))
+		if p.nMu != expectedNMu {
+			t.Fatalf("%s: nMu = %d, want %d (floor(2^32 / %d))",
+				names[idx], p.nMu, expectedNMu, p.n)
 		}
-		for i := 0; i < len(p.mVal); i++ {
-			expected := uint32(uint64(1<<32) / uint64(p.n-uint32(i)))
-			got := p.mVal[i]
-			if got != expected {
-				t.Fatalf("%s: mVal[%d] = %d, want %d (formula: 2^32 / (%d-%d))",
-					names[idx], i, got, expected, p.n, i)
-			}
+
+		// rejectionThreshold = floor(2^24 / n) * n
+		expectedThresh := uint32((uint64(1<<24) / uint64(p.n)) * uint64(p.n))
+		if p.rejectionThreshold != expectedThresh {
+			t.Fatalf("%s: rejectionThreshold = %d, want %d (floor(2^24 / %d) * %d)",
+				names[idx], p.rejectionThreshold, expectedThresh, p.n, p.n)
 		}
 	}
 }

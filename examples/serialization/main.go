@@ -25,7 +25,7 @@ func main() {
 
 	// --- Full-key serialization (NIST format) ---
 
-	// Serialize the secret key (2305 bytes for HQC-128).
+	// Serialize the secret key (2321 bytes for HQC-128).
 	skBytes := dk.Bytes()
 	fmt.Printf("Full secret key: %d bytes\n", len(skBytes))
 
@@ -47,8 +47,8 @@ func main() {
 
 	// --- Compact seed serialization ---
 
-	// The seed (96 bytes for HQC-128) is sufficient to regenerate the
-	// full key deterministically. Smaller than the full 2305-byte key.
+	// The seed (32 bytes for HQC-128) is sufficient to regenerate the
+	// full key deterministically. Smaller than the full 2321-byte key.
 	seed := dk.Seed()
 	fmt.Printf("Compact seed: %d bytes (vs %d full)\n", len(seed), len(skBytes))
 

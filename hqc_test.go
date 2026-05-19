@@ -370,7 +370,7 @@ func TestDecapsZeroCiphertext128(t *testing.T) {
 		t.Fatalf("ss length = %d, want %d", len(ss), SharedSecretSize128)
 	}
 
-	// The shared secret should be a valid 64-byte value (implicit rejection).
+	// The shared secret should be a valid 32-byte value (implicit rejection).
 	allZero := true
 	for _, b := range ss {
 		if b != 0 {
@@ -521,30 +521,36 @@ func TestReturnedSliceIsolation128(t *testing.T) {
 // --- Domain Byte Anti-Tamper ---
 
 func TestDomainBytes(t *testing.T) {
-	if gFctDomain != 3 {
-		t.Fatalf("G domain = %d, want 3", gFctDomain)
+	if gFctDomain != 0 {
+		t.Fatalf("G domain = %d, want 0", gFctDomain)
 	}
-	if kFctDomain != 4 {
-		t.Fatalf("K domain = %d, want 4", kFctDomain)
+	if hFctDomain != 1 {
+		t.Fatalf("H domain = %d, want 1", hFctDomain)
+	}
+	if iFctDomain != 2 {
+		t.Fatalf("I domain = %d, want 2", iFctDomain)
+	}
+	if jFctDomain != 3 {
+		t.Fatalf("J domain = %d, want 3", jFctDomain)
 	}
 }
 
 // --- Keygen Vector Verification (#19) ---
 
 func TestKeygenVectorsMatch128(t *testing.T) {
-	// Generate from seed, re-derive x and y from sk_seed, verify they match
+	// Generate from seed, re-derive y and x from seed_dk, verify they match
 	// the vectors that were used to compute the public key s = x + y*h.
 	dk, _ := GenerateKey128()
 
-	// Re-derive x, y from sk_seed.
+	// Re-derive y, x from seed_dk (v5.0.0 order: y first, then x).
 	p := params128
-	skSeed := dk.dk.skSeed
+	seedDK := dk.dk.seedDK
 	x := make([]uint64, p.vecNSize64)
 	y := make([]uint64, p.vecNSize64)
 
-	se := newSeedExpander(skSeed)
-	sampleFixedWeightVector(p, se, x, p.omega)
-	sampleFixedWeightVector(p, se, y, p.omega)
+	se := newSeedExpander(seedDK)
+	sampleFixedWeightKeygen(p, se, y, p.omega)
+	sampleFixedWeightKeygen(p, se, x, p.omega)
 	se.Release()
 
 	// Verify x and y match the cached values.
@@ -569,7 +575,7 @@ func TestKeygenVectorsMatch128(t *testing.T) {
 
 func TestDecapsulateTimingConsistency128(t *testing.T) {
 	// Verify that Decapsulate with a VALID ciphertext and an INVALID ciphertext
-	// both produce 64-byte shared secrets without error. This doesn't measure
+	// both produce 32-byte shared secrets without error. This doesn't measure
 	// wall-clock timing (Go benchmarks are not reliable for side-channel
 	// verification), but it verifies the code PATH is identical:
 	// - Both paths allocate the same buffers
@@ -598,9 +604,9 @@ func TestDecapsulateTimingConsistency128(t *testing.T) {
 		t.Fatalf("invalid ct decaps error: %v", err)
 	}
 
-	// Both must return 64-byte shared secrets.
-	if len(ssDecValid) != 64 || len(ssDecInvalid) != 64 {
-		t.Fatalf("ss lengths: valid=%d invalid=%d, both must be 64", len(ssDecValid), len(ssDecInvalid))
+	// Both must return 32-byte shared secrets.
+	if len(ssDecValid) != 32 || len(ssDecInvalid) != 32 {
+		t.Fatalf("ss lengths: valid=%d invalid=%d, both must be 32", len(ssDecValid), len(ssDecInvalid))
 	}
 
 	// Invalid ct must produce a DIFFERENT shared secret (implicit rejection).
@@ -627,7 +633,8 @@ func TestSizeConstants(t *testing.T) {
 	for _, tc := range tests {
 		sl := uint32(tc.p.seedLen)
 		computedPK := int(sl + tc.p.vecNSizeBytes)
-		computedSK := int(sl + tc.p.vecKSizeBytes + uint32(computedPK))
+		// v5.0.0 SK layout: pk || seed_dk(32) || sigma(securityBytes) || seed_kem(32)
+		computedSK := computedPK + int(sl) + int(tc.p.securityBytes) + int(sl)
 		computedCT := int(tc.p.vecNSizeBytes + tc.p.vecN1N2SizeBytes + uint32(tc.p.saltLen))
 
 		if tc.pkSize != computedPK {

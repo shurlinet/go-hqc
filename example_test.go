@@ -34,7 +34,7 @@ func ExampleGenerateKey128() {
 	fmt.Printf("shared secret length: %d bytes\n", len(sharedSecret))
 	// Output:
 	// shared secrets match: true
-	// shared secret length: 64 bytes
+	// shared secret length: 32 bytes
 }
 
 // ExampleDecapsulationKey128_Bytes demonstrates serializing and restoring HQC keys.
@@ -45,7 +45,7 @@ func ExampleDecapsulationKey128_Bytes() {
 	}
 	defer dk.Destroy()
 
-	// Serialize the full secret key (2305 bytes for HQC-128).
+	// Serialize the full secret key (2321 bytes for HQC-128).
 	skBytes := dk.Bytes()
 	fmt.Printf("secret key size: %d bytes\n", len(skBytes))
 
@@ -56,7 +56,7 @@ func ExampleDecapsulationKey128_Bytes() {
 	}
 	defer dk2.Destroy()
 
-	// Compact seed (96 bytes for HQC-128) - sufficient to regenerate the full key.
+	// Compact seed (32 bytes for HQC-128) - sufficient to regenerate the full key.
 	seed := dk.Seed()
 	fmt.Printf("seed size: %d bytes\n", len(seed))
 
@@ -73,10 +73,10 @@ func ExampleDecapsulationKey128_Bytes() {
 	fmt.Printf("public keys match: %v\n", bytes.Equal(pk1, pk2) && bytes.Equal(pk2, pk3))
 	fmt.Printf("public key size: %d bytes\n", len(pk1))
 	// Output:
-	// secret key size: 2305 bytes
-	// seed size: 96 bytes
+	// secret key size: 2321 bytes
+	// seed size: 32 bytes
 	// public keys match: true
-	// public key size: 2249 bytes
+	// public key size: 2241 bytes
 }
 
 // ExampleGenerateKey256 demonstrates all three HQC parameter sets.
@@ -124,7 +124,7 @@ func ExampleGenerateKey256() {
 	fmt.Printf("HQC-256: ct=%d bytes, ss=%d bytes, match=%v\n",
 		len(ct256), len(ss256), bytes.Equal(ss256, dec256))
 	// Output:
-	// HQC-128: ct=4433 bytes, ss=64 bytes, match=true
-	// HQC-192: ct=8978 bytes, ss=64 bytes, match=true
-	// HQC-256: ct=14421 bytes, ss=64 bytes, match=true
+	// HQC-128: ct=4433 bytes, ss=32 bytes, match=true
+	// HQC-192: ct=8978 bytes, ss=32 bytes, match=true
+	// HQC-256: ct=14421 bytes, ss=32 bytes, match=true
 }

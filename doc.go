@@ -19,7 +19,7 @@
 // # Key Lifecycle
 //
 // Call [DecapsulationKey128.Destroy] when a decapsulation key is no longer
-// needed. Destroy zeroes all secret material (skSeed, sigma, x, y, sk, seed).
+// needed. Destroy zeroes all secret material (seedDK, sigma, seedKem, x, y, sk).
 // Dropping a DecapsulationKey reference without calling Destroy leaves secret
 // material in memory until the garbage collector reclaims the object and the
 // OS overwrites the pages. Go does not provide deterministic destructors.

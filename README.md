@@ -86,9 +86,9 @@ func main() {
 
 | Parameter Set | Public Key | Secret Key | Ciphertext | Shared Secret | Seed |
 |--------------|-----------|-----------|------------|--------------|------|
-| HQC-128 | 2,249 | 2,305 | 4,433 | 64 | 96 |
-| HQC-192 | 4,522 | 4,586 | 8,978 | 64 | 104 |
-| HQC-256 | 7,245 | 7,317 | 14,421 | 64 | 112 |
+| HQC-128 | 2,241 | 2,321 | 4,433 | 32 | 32 |
+| HQC-192 | 4,514 | 4,602 | 8,978 | 32 | 32 |
+| HQC-256 | 7,237 | 7,333 | 14,421 | 32 | 32 |
 
 All sizes in bytes.
 
@@ -97,10 +97,10 @@ All sizes in bytes.
 - **Implicit rejection**: invalid ciphertexts produce a random-looking shared
   secret derived from sigma (never an error that reveals decryption success/failure)
 - **Constant-time FO comparison**: uses `crypto/subtle.ConstantTimeSelect`
-- **Key zeroing**: `Destroy()` zeroes skSeed, sigma, x, y, sk, seed via
+- **Key zeroing**: `Destroy()` zeroes seedDK, sigma, seedKem, x, y, sk via
   `//go:noinline` zero functions
 - **Parse validation**: `ParseDecapsulationKey` verifies the embedded public key
-  matches sk_seed (catches corruption)
+  matches seed_dk (catches corruption)
 - **WASM caveat**: constant-time guarantees hold for native targets (amd64,
   arm64). WASM compilation does not provide timing guarantees.
 - **No fault injection countermeasures**: this implementation does not defend
@@ -159,9 +159,9 @@ Or directly: `GOHQC_ACCUMULATED=10000 go test -run=TestAccumulated -v ./...`
 | Property: round-trip | 3 | 5 iterations per param set |
 | Property: key serial | 3 | DK + EK round-trip per param set |
 | Property: seed | 3 | Seed round-trip per param set |
-| AI threat defense | 3 | Domain bytes, SHAKE order, mVal formula |
+| AI threat defense | 3 | Domain bytes, hashH independent, nMu/rejThreshold formula |
 | Version | 1 | Version() returns expected spec string |
-| Keygen verification | 1 | Re-derive x,y from sk_seed, verify s = x + y*h |
+| Keygen verification | 1 | Re-derive y,x from seed_dk, verify s = x + y*h |
 | Accumulated | 3 | SHAKE128 accumulated hashes vs v5.0.0 C (100-1M tiers) |
 | Benchmarks | 9 | Keygen/Encaps/Decaps per param set |
 | Fuzz | 2 | FuzzDecapsulate128, FuzzKeyRoundTrip128 |
@@ -175,9 +175,9 @@ go-hqc is verified by:
 * [KAT vectors](testdata/) - 60 Known Answer Tests (30 keygen + 30 encaps/decaps) across all 3 parameter sets, byte-for-byte match against the official HQC v5.0.0 C reference. Generated using HQC's custom SHAKE256 DRBG ([tools/gen-vectors/](tools/gen-vectors/)).
 * [Accumulated hash anchors](testdata/accumulated.json) - SHA256 hashes over 1M keygen/encaps iterations per parameter set. Go tests verify up to 100K; 1M hashes are reference data for external verifiers.
 * [Property tests](hqc_property_test.go) - 15 round-trip iterations (5 per param set), 3 key serialization round-trips (Bytes/Parse + Seed/New + EK), 3 seed determinism proofs
-* [Fuzz tests](hqc_fuzz_test.go) - 2 targets: `FuzzDecapsulate128` (random ciphertexts, no panics, always 64-byte implicit rejection) and `FuzzKeyRoundTrip128` (random seeds, generate/serialize/parse/decaps agreement with 5 VP1 length assertions)
-* [AI threat defense](hqc_property_test.go) - 3 independent verifications: domain separation bytes vs v5.0.0 symmetric.h, SHAKE256 absorb ordering via independent construction, Barrett reduction mVal formula recomputation for all 3 param sets
-* [Component tests](gf_test.go) - 48 tests across 8 subsystems: GF(2^m) exhaustive 65,536-multiply oracle, seedexpander 8-byte alignment, karatsuba polynomial multiply, Reed-Muller RM(1,7) all-256-byte round-trip, Reed-Solomon LFSR encode + Berlekamp decode with varying error counts, Gao-Mateer additive FFT root finding, concatenated code round-trip, constant-time vector sampling
+* [Fuzz tests](hqc_fuzz_test.go) - 2 targets: `FuzzDecapsulate128` (random ciphertexts, no panics, always 32-byte implicit rejection) and `FuzzKeyRoundTrip128` (random seeds, generate/serialize/parse/decaps agreement with 5 VP1 length assertions)
+* [AI threat defense](hqc_property_test.go) - 3 independent verifications: domain separation bytes (G/H/I/J uniqueness), hashH via independent SHA3-256 construction, nMu/rejectionThreshold formula verification for all 3 param sets
+* [Component tests](gf_test.go) - 48 tests across 8 subsystems: GF(2^m) exhaustive 65,536-multiply oracle, seedexpander direct squeeze, karatsuba polynomial multiply, Reed-Muller RM(1,7) all-256-byte round-trip, Reed-Solomon LFSR encode + Berlekamp decode with varying error counts, Gao-Mateer additive FFT root finding, concatenated code round-trip, constant-time vector sampling
 * 9 [benchmarks](hqc_property_test.go) - Keygen/Encapsulate/Decapsulate for all 3 parameter sets
 
 ```
@@ -206,10 +206,6 @@ None. go-hqc uses only the Go standard library (`crypto/sha3`, `crypto/subtle`,
 
 Source: official HQC v5.0.0 (https://gitlab.com/pqc-hqc/hqc/). See [UPSTREAM.md](UPSTREAM.md) for full
 tracking details and FIPS 207 status.
-
-```sh
-go run tools/check-upstream/main.go
-```
 
 ## AI Transparency
 

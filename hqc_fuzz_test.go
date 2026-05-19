@@ -10,7 +10,7 @@ import (
 
 // FuzzDecapsulate128 feeds random ciphertexts to Decapsulate.
 // The property: Decapsulate must NEVER panic and must ALWAYS return a
-// 64-byte shared secret (implicit rejection via sigma).
+// 32-byte shared secret (implicit rejection via sigma).
 func FuzzDecapsulate128(f *testing.F) {
 	// Seed corpus: one valid ciphertext from KAT vectors.
 	var vf encapsVectorFile
@@ -58,9 +58,9 @@ func FuzzDecapsulate128(f *testing.F) {
 }
 
 // FuzzKeyRoundTrip128 verifies that generate -> serialize -> parse -> decaps
-// produces matching shared secrets. Seeds with random 96-byte values.
+// produces matching shared secrets. Seeds with random 32-byte values.
 func FuzzKeyRoundTrip128(f *testing.F) {
-	// Seed corpus: one KAT entropy (first 96 bytes from the 48-byte entropy doubled).
+	// Seed corpus: one KAT entropy truncated to SeedSize128 (32 bytes).
 	var vf keygenVectorFile
 	data, err := os.ReadFile("testdata/keygen.json")
 	if err != nil {
@@ -74,8 +74,7 @@ func FuzzKeyRoundTrip128(f *testing.F) {
 		if err != nil {
 			f.Fatalf("hex decode entropy: %v", err)
 		}
-		// Pad to SeedSize128 (96) if needed; KATRNG entropy is 48 bytes,
-		// but NewDecapsulationKey128 needs exactly 96.
+		// Use first 32 bytes of entropy as seed_kem.
 		seed := make([]byte, SeedSize128)
 		copy(seed, entropy)
 		f.Add(seed)
@@ -90,10 +89,10 @@ func FuzzKeyRoundTrip128(f *testing.F) {
 		}
 		dk, err := NewDecapsulationKey128(seed)
 		if err != nil {
-			// NewDecapsulationKey128 with a 96-byte seed deterministically
+			// NewDecapsulationKey128 with a 32-byte seed deterministically
 			// generates a key and runs a consistency check against its own
 			// output. This should never fail. If it does, it's a real bug.
-			t.Fatalf("NewDecapsulationKey128 from 96-byte seed: %v", err)
+			t.Fatalf("NewDecapsulationKey128 from 32-byte seed: %v", err)
 		}
 
 		// Serialize and re-parse the decapsulation key.

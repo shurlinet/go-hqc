@@ -35,7 +35,7 @@ func GenerateKey256() (*DecapsulationKey256, error) {
 	return &DecapsulationKey256{dk: dk}, nil
 }
 
-// NewDecapsulationKey256 creates a decapsulation key from a 112-byte seed.
+// NewDecapsulationKey256 creates a decapsulation key from a 32-byte seed.
 // The seed is seed_kem (32 bytes).
 func NewDecapsulationKey256(seed []byte) (*DecapsulationKey256, error) {
 	dk, err := newDecapsulationKeyFromSeed(params256, seed)
@@ -99,7 +99,7 @@ func (dk *DecapsulationKey256) Bytes() []byte {
 	return out
 }
 
-// Seed returns the 112-byte compact seed (pk || seed_dk || sigma || seed_kem_seed).
+// Seed returns the 32-byte seed_kem.
 // Returns nil after [DecapsulationKey256.Destroy].
 func (dk *DecapsulationKey256) Seed() []byte {
 	dk.dk.mu.RLock()
@@ -121,7 +121,7 @@ func (dk *DecapsulationKey256) Destroy() {
 	dk.dk.destroy()
 }
 
-// Bytes returns the 7245-byte public key.
+// Bytes returns the 7237-byte public key.
 func (ek *EncapsulationKey256) Bytes() []byte {
 	out := make([]byte, len(ek.ek.pk))
 	copy(out, ek.ek.pk)

@@ -1,6 +1,8 @@
 package hqc
 
 import (
+	"crypto/sha3"
+	"hash"
 	"io"
 
 	"github.com/shurlinet/go-hqc/internal/shake"
@@ -8,10 +10,9 @@ import (
 
 // Test-only exports for deterministic encapsulation and independent verification.
 
-// newSHAKE256ForTest returns a fresh SHAKE256 state for AI threat defense
-// tests that need independent hash construction.
-func newSHAKE256ForTest() *shake.State {
-	return shake.New256()
+// newSHA3_256ForTest returns a fresh SHA3-256 hash for AI threat defense tests.
+func newSHA3_256ForTest() hash.Hash {
+	return sha3.New256()
 }
 
 func EncapsulateForTest128(ek *EncapsulationKey128, rand io.Reader) (sharedSecret, ciphertext []byte) {

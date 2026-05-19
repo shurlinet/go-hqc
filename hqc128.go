@@ -121,7 +121,7 @@ func (dk *DecapsulationKey128) Destroy() {
 	dk.dk.destroy()
 }
 
-// Bytes returns the 2249-byte public key.
+// Bytes returns the 2241-byte public key.
 func (ek *EncapsulationKey128) Bytes() []byte {
 	out := make([]byte, len(ek.ek.pk))
 	copy(out, ek.ek.pk)
