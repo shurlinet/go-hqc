@@ -45,8 +45,8 @@ func TestRMRoundTripAllBytes(t *testing.T) {
 }
 
 func TestRMConcreteVector(t *testing.T) {
-	// Verify RM encode of byte 0x71 (= 113) matches vectors.json.
-	// vectors.json codeword_first_64_bytes is from a full rmEncode (all N1 bytes).
+	// Verify RM encode of byte 0x71 (= 113) matches pre-computed reference.
+	// RM(1,7) encoding is spec-version-independent (pure combinatorics).
 	// We verify that the first 128-bit codeword (2 uint64s) matches the expected
 	// pattern, and that all MULTIPLICITY copies are identical.
 	for _, tc := range []struct {
@@ -68,7 +68,7 @@ func TestRMConcreteVector(t *testing.T) {
 
 			// The first 128-bit codeword for 0x71 must be:
 			// 0x5555aaaa5555aaaa (LE) and 0x5555aaaaaaaa5555 (LE).
-			// From vectors.json: "aaaa55555555aaaa5555aaaaaaaa5555"
+			// Pre-computed: "aaaa55555555aaaa5555aaaaaaaa5555"
 			// which in LE uint64 is 0xaaaa55555555aaaa and 0x5555aaaaaaaa5555.
 			wantW0 := uint64(0xaaaa55555555aaaa)
 			wantW1 := uint64(0x5555aaaaaaaa5555)

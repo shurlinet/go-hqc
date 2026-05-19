@@ -11,3 +11,14 @@
 | NIST status | Selected for standardization (FIPS 207 pending) |
 
 go-hqc targets the v5.0.0 specification parameters.
+
+## Tracking
+
+Automated weekly check via GitHub Actions (`.github/workflows/check-upstream.yml`).
+Opens an issue if new tags appear beyond v5.0.0.
+
+Manual check:
+
+```sh
+go run tools/check-upstream/main.go
+```

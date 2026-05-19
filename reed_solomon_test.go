@@ -6,7 +6,8 @@ import (
 )
 
 func TestRSEncodeConcreteVector(t *testing.T) {
-	// Verify RS encode of msg=[0x42, 0, ..., 0] matches vectors.json.
+	// Verify RS encode of msg=[0x42, 0, ..., 0] matches pre-computed reference.
+	// RS encode uses the same GF(2^8) arithmetic in all HQC spec versions.
 	for _, tc := range []struct {
 		name   string
 		p      *params

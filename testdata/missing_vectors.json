@@ -1,0 +1,42 @@
+{
+  "algorithm": "HQC",
+  "version": "v5.0.0",
+  "param_set": "hqc-1",
+  "type": "missing_vectors",
+  "barrett_reduce": [
+    {"input": 0, "output": 0, "param_n": 17669},
+    {"input": 1, "output": 1, "param_n": 17669},
+    {"input": 17668, "output": 17668, "param_n": 17669},
+    {"input": 17669, "output": 0, "param_n": 17669},
+    {"input": 17670, "output": 1, "param_n": 17669},
+    {"input": 35337, "output": 17668, "param_n": 17669},
+    {"input": 35338, "output": 0, "param_n": 17669},
+    {"input": 35339, "output": 1, "param_n": 17669},
+    {"input": 16767880, "output": 17668, "param_n": 17669},
+    {"input": 16767881, "output": 0, "param_n": 17669},
+    {"input": 16777215, "output": 9334, "param_n": 17669},
+    {"input": 12345, "output": 12345, "param_n": 17669},
+    {"input": 67890, "output": 14883, "param_n": 17669},
+    {"input": 100000, "output": 11655, "param_n": 17669},
+    {"input": 1000000, "output": 10536, "param_n": 17669}
+  ],
+  "vect_compare": [
+    {"description": "equal", "size": 32, "result": 0},
+    {"description": "differ_first", "size": 32, "result": 1},
+    {"description": "differ_last", "size": 32, "result": 1},
+    {"description": "zeros_equal", "size": 32, "result": 0},
+    {"description": "ones_equal", "size": 32, "result": 0},
+    {"description": "single_differ", "size": 1, "result": 1}
+  ],
+  "vect_truncate": [
+    {"description": "all_ones_truncated", "bits_set": 17664, "param_n1n2": 17664},
+    {"description": "pattern_truncated", "last_word_idx": 275, "last_word_hex": "aaaaaaaaaaaaaaaa"}
+  ],
+  "sk_corruption": [
+    {"modified_pos": 0, "different_ss": true, "ss_32_bytes": true},
+    {"modified_pos": 2241, "different_ss": true, "ss_32_bytes": true},
+    {"modified_pos": 2273, "different_ss": false, "ss_32_bytes": true},
+    {"modified_pos": 2289, "different_ss": false, "ss_32_bytes": true},
+    {"modified_pos": 2320, "different_ss": false, "ss_32_bytes": true}
+  ]
+}
