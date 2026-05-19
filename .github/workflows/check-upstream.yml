@@ -20,7 +20,7 @@ jobs:
 
       - name: Open issue if upstream changed
         if: failure()
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             const title = 'Upstream HQC has new tags beyond v5.0.0';
