@@ -159,14 +159,14 @@ Or directly: `GOHQC_ACCUMULATED=10000 go test -run=TestAccumulated -v ./...`
 | Property: round-trip | 3 | 5 iterations per param set |
 | Property: key serial | 3 | DK + EK round-trip per param set |
 | Property: seed | 3 | Seed round-trip per param set |
-| AI threat defense | 3 | Domain bytes, hashH independent, nMu/rejThreshold formula |
+| AI threat defense | 4 | Domain bytes (G/H/I/J/XOF/PRNG), hashG + hashH independent, nMu/rejThreshold formula |
 | Version | 1 | Version() returns expected spec string |
 | Keygen verification | 1 | Re-derive y,x from seed_dk, verify s = x + y*h |
 | Accumulated | 3 | SHAKE128 accumulated hashes vs v5.0.0 C (100-1M tiers) |
 | Benchmarks | 9 | Keygen/Encaps/Decaps per param set |
 | Fuzz | 2 | FuzzDecapsulate128, FuzzKeyRoundTrip128 |
 | Godoc examples | 3 | Basic, serialization, all param sets |
-| **Component tests** | 48 | GF, seedexpander, gf2x, vector, RM, RS, FFT, code |
+| **Component tests** | 50 | GF, seedexpander, gf2x, vector, RM, RS, FFT, code |
 
 ## Verification
 
@@ -176,8 +176,8 @@ go-hqc is verified by:
 * [Accumulated hash anchors](testdata/accumulated.json) - SHA256 hashes over 1M keygen/encaps iterations per parameter set. Go tests verify up to 100K; 1M hashes are reference data for external verifiers.
 * [Property tests](hqc_property_test.go) - 15 round-trip iterations (5 per param set), 3 key serialization round-trips (Bytes/Parse + Seed/New + EK), 3 seed determinism proofs
 * [Fuzz tests](hqc_fuzz_test.go) - 2 targets: `FuzzDecapsulate128` (random ciphertexts, no panics, always 32-byte implicit rejection) and `FuzzKeyRoundTrip128` (random seeds, generate/serialize/parse/decaps agreement with 5 VP1 length assertions)
-* [AI threat defense](hqc_property_test.go) - 3 independent verifications: domain separation bytes (G/H/I/J uniqueness), hashH via independent SHA3-256 construction, nMu/rejectionThreshold formula verification for all 3 param sets
-* [Component tests](gf_test.go) - 48 tests across 8 subsystems: GF(2^m) exhaustive 65,536-multiply oracle, seedexpander direct squeeze, karatsuba polynomial multiply, Reed-Muller RM(1,7) all-256-byte round-trip, Reed-Solomon LFSR encode + Berlekamp decode with varying error counts, Gao-Mateer additive FFT root finding, concatenated code round-trip, constant-time vector sampling
+* [AI threat defense](hqc_property_test.go) - 4 independent verifications: domain separation bytes (G/H/I/J/XOF/PRNG uniqueness + pinned values), hashG via independent SHA3-512, hashH via independent SHA3-256, nMu/rejectionThreshold formula recomputation for all 3 param sets
+* [Component tests](gf_test.go) - 50 tests across 8 subsystems: GF(2^m) exhaustive 65,536-multiply oracle, seedexpander direct squeeze + pinned regression, karatsuba polynomial multiply, Reed-Muller RM(1,7) all-256-byte round-trip, Reed-Solomon LFSR encode + Berlekamp decode with varying error counts, Gao-Mateer additive FFT root finding, concatenated code round-trip, sampler1/sampler2 weight + determinism + consecutive calls
 * 9 [benchmarks](hqc_property_test.go) - Keygen/Encapsulate/Decapsulate for all 3 parameter sets
 
 ```

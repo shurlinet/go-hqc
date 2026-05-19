@@ -1,7 +1,6 @@
 package hqc
 
 import (
-	"encoding/hex"
 	"math/bits"
 	"testing"
 )
@@ -259,26 +258,3 @@ func TestLoad8ArrKnownValue(t *testing.T) {
 	}
 }
 
-// helpers
-
-func firstSetBits(v []uint64, count int) []int {
-	var result []int
-	for w := 0; w < len(v) && len(result) < count; w++ {
-		for b := 0; b < 64 && len(result) < count; b++ {
-			if v[w]&(uint64(1)<<uint(b)) != 0 {
-				result = append(result, w*64+b)
-			}
-		}
-	}
-	return result
-}
-
-func vecToHex(v []uint64, nWords int) string {
-	buf := make([]byte, nWords*8)
-	for i := 0; i < nWords; i++ {
-		for b := 0; b < 8; b++ {
-			buf[i*8+b] = byte(v[i] >> (uint(b) * 8))
-		}
-	}
-	return hex.EncodeToString(buf)
-}

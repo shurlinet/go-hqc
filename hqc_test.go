@@ -533,6 +533,15 @@ func TestDomainBytes(t *testing.T) {
 	if jFctDomain != 3 {
 		t.Fatalf("J domain = %d, want 3", jFctDomain)
 	}
+	if seedExpanderDomain != 0x01 {
+		t.Fatalf("XOF domain = 0x%02x, want 0x01", seedExpanderDomain)
+	}
+}
+
+func TestKATRNGDomain(t *testing.T) {
+	if katPRNGDomain != 0x00 {
+		t.Fatalf("KAT PRNG domain = 0x%02x, want 0x00", katPRNGDomain)
+	}
 }
 
 // --- Keygen Vector Verification (#19) ---
@@ -541,12 +550,20 @@ func TestKeygenVectorsMatch128(t *testing.T) {
 	// Generate from seed, re-derive y and x from seed_dk, verify they match
 	// the vectors that were used to compute the public key s = x + y*h.
 	dk, _ := GenerateKey128()
+	defer dk.Destroy()
 
 	// Re-derive y, x from seed_dk (v5.0.0 order: y first, then x).
 	p := params128
 	seedDK := dk.dk.seedDK
 	x := make([]uint64, p.vecNSize64)
 	y := make([]uint64, p.vecNSize64)
+	s := make([]uint64, p.vecNSize64)
+
+	defer func() {
+		ZeroUint64s(x)
+		ZeroUint64s(y)
+		ZeroUint64s(s)
+	}()
 
 	se := newSeedExpander(seedDK)
 	sampleFixedWeightKeygen(p, se, y, p.omega)
@@ -562,7 +579,6 @@ func TestKeygenVectorsMatch128(t *testing.T) {
 	}
 
 	// Verify s = x + y*h.
-	s := make([]uint64, p.vecNSize64)
 	polyMul(p, s, y, dk.dk.ek.h)
 	polyAdd(s, x, s, int(p.vecNSize64))
 

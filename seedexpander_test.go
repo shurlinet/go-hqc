@@ -98,27 +98,27 @@ func TestSeedExpanderDomainByte(t *testing.T) {
 }
 
 func TestSeedExpanderSampler1Regression(t *testing.T) {
-	// Regression: the first 3 bytes from seedexpander(zeros(32)) for sampler1
-	// (rejection sampling) must produce a specific candidate value after
-	// Barrett reduction. This catches seedexpander, domain byte, or Barrett
-	// formula changes.
+	// Pin the first sampler1 candidate from seedexpander(zeros(32)).
+	// SHAKE256(zeros(32) || 0x01).squeeze(3) = [0xd3, 0x59, 0x3e].
+	// LE 24-bit candidate = 0x3e59d3 = 4086227.
+	// Barrett reduce: floor(4086227 * 243079 / 2^32) = 231, 4086227 - 231*17669 = 4688.
+	// If this value changes, the seedexpander domain, seed size, or Barrett
+	// formula has been altered.
 	p := params128
 	seed := make([]byte, 32)
 	se := newSeedExpander(seed)
 
-	// sampler1 reads 3 bytes per candidate.
 	raw := make([]byte, 3)
 	se.Read(raw)
+	se.Release()
 
 	candidate := uint32(raw[0]) | uint32(raw[1])<<8 | uint32(raw[2])<<16
-	// Only test if candidate is below rejection threshold.
-	if candidate < p.rejectionThreshold {
-		reduced := barrettReduceN(candidate, p.nMu, p.n)
-		if reduced >= p.n {
-			t.Fatalf("Barrett reduced value %d >= n=%d", reduced, p.n)
-		}
+	if candidate != 4086227 {
+		t.Fatalf("candidate = %d, want 4086227", candidate)
 	}
-	// The key property: the value is deterministic from seed+domain.
-	// KAT vectors provide full-chain verification. This test catches
-	// a broken seedexpander before KATs are even attempted.
+
+	reduced := barrettReduceN(candidate, p.nMu, p.n)
+	if reduced != 4688 {
+		t.Fatalf("Barrett reduced = %d, want 4688", reduced)
+	}
 }

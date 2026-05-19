@@ -260,6 +260,31 @@ func TestAIThreatDomainBytesNotSwapped(t *testing.T) {
 	}
 }
 
+// TestAIThreatHashGIndependent verifies hashG via independent SHA3-512
+// construction. hashG(hEK, m, salt) = SHA3-512(hEK || m || salt || domain=0).
+// hashG is the most security-critical function: it produces K (shared secret
+// source) and theta (encryption randomness).
+func TestAIThreatHashGIndependent(t *testing.T) {
+	hEK := []byte("hqc-test-h_ek-32-bytes-exactly!!")
+	m := []byte("hqc-test-message-16")
+	salt := []byte("hqc-test-salt16!")
+
+	// Production path.
+	got := hashG(params128, hEK, m, salt)
+
+	// Independent construction: SHA3-512(hEK || m || salt || 0x00).
+	h := newSHA3_512ForTest()
+	h.Write(hEK)
+	h.Write(m)
+	h.Write(salt)
+	h.Write([]byte{gFctDomain})
+	want := h.Sum(nil)
+
+	if !bytes.Equal(got[:], want) {
+		t.Fatal("hashG output differs from independent SHA3-512(hEK || m || salt || domain)")
+	}
+}
+
 // TestAIThreatHashHIndependent verifies hashH via independent SHA3-256
 // construction. hashH(pk) = SHA3-256(pk || domain=1).
 func TestAIThreatHashHIndependent(t *testing.T) {

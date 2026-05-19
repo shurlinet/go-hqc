@@ -15,6 +15,11 @@ func newSHA3_256ForTest() hash.Hash {
 	return sha3.New256()
 }
 
+// newSHA3_512ForTest returns a fresh SHA3-512 hash for AI threat defense tests.
+func newSHA3_512ForTest() hash.Hash {
+	return sha3.New512()
+}
+
 func EncapsulateForTest128(ek *EncapsulationKey128, rand io.Reader) (sharedSecret, ciphertext []byte) {
 	return ek.encapsulateWithRandom(rand)
 }
@@ -27,6 +32,10 @@ func EncapsulateForTest256(ek *EncapsulationKey256, rand io.Reader) (sharedSecre
 	return ek.encapsulateWithRandom(rand)
 }
 
+// katPRNGDomain is the domain separation byte for the HQC KAT PRNG (v5.0.0).
+// Anti-tamper: tested by TestKATRNGDomain.
+const katPRNGDomain = 0x00
+
 // KATRNG replicates the HQC KAT RNG: SHAKE256(entropy[48] || domain).
 // Direct squeeze (NO 8-byte alignment - different from the seedexpander).
 type KATRNG struct {
@@ -37,7 +46,7 @@ type KATRNG struct {
 func NewKATRNG(entropy []byte) *KATRNG {
 	st := shake.New256()
 	st.Write(entropy)
-	st.Write([]byte{0x00}) // HQC_PRNG_DOMAIN (v5.0.0)
+	st.Write([]byte{katPRNGDomain})
 	return &KATRNG{state: st}
 }
 
